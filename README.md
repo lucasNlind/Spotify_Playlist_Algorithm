@@ -22,5 +22,7 @@ The firs statistical analysis I ran was on a Sunny Weather playlist I created wi
 
 ### Tools / Resources
 The Spotipy Python library ended up being the most incredible resource for this project. The API makes the whole Authorization/data pulling process super easy. I recommend playing around with the library to get comfortable pulling data because it can be fickle sometimes. There are also a bunch of great resources on GitHub that walk you through some examples of using the library. It's super easy once you get the hang of it. 
+
 The actual Spotify application is super intuitive as well. You can pull song/artist/playlist URI's super easily.
+
 I coded everything in Visual Studio Code and then ran the program in MobaXTerm.
