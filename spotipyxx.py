@@ -14,9 +14,9 @@ import pandas as pd
 def percent(n):
     return int(n * 100)
 
-cid = 'ab16321ec31348b881a8965914f2f23a'
-secret = '926b25bd2ec74144b2b7627120fbd1d0'
-username = 'pimplepopper23'
+cid = 'YOUR_CLIENT_ID'
+secret = 'YOUR_CLIENT_SECRET'
+username = 'YOUR_USERNAME'
 scope = 'playlist-modify-public user-top-read'
 
 client_credentials_manager = SpotifyClientCredentials(client_id=cid, client_secret=secret)
@@ -34,7 +34,6 @@ except Exception:
 sp = spotipy.Spotify(client_credentials_manager = client_credentials_manager, auth=token)
 
 user = sp.current_user()
-#print(json.dumps(user, sort_keys=True, indent=4))
 
 # Grabbing data from the current_user
 display_name = user['display_name']
@@ -160,6 +159,10 @@ print('Generating audio features for playlist: SunnyD...')
 display_playlist_features(sunny_d_features)
 print('Generating audio features for playlist: Rainy Day...')
 display_playlist_features(rainy_day_features)
+
+
+
+# Examples of how you can use the Spotipy library: 
 
 # ******************* DISPLAY CURRENT USER PLAYLISTS *******************
 current_playlists = sp.current_user_playlists(limit=50, offset=0)
