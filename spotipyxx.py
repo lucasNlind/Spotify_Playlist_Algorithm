@@ -1,15 +1,20 @@
 import os
-import sys
-import json
-import webbrowser
+import time
+import requests
 from json.decoder import JSONDecodeError
 from pprint import pprint
 import spotipy
 import spotipy.util as util
 from spotipy.oauth2 import SpotifyClientCredentials
 from spotipy.oauth2 import SpotifyOAuth
-import numpy as np
-import pandas as pd
+
+def print_songs(songs):
+    for i in range(len(songs)):
+        print(' -', songs[i][0])
+
+def print_recommendations(songs):
+    for i in range(len(songs)):
+        print(' -', songs[i][0], ',', songs[i][1])
 
 def percent(n):
     return int(n * 100)
@@ -27,14 +32,10 @@ except Exception:
     os.remove(f".cache-{username}")
     token = util.prompt_for_user_token(username, scope=scope)
 
-# Prints json data in a format that we can read \/
-# print(json.dumps(VARIABLE, sort_keys=True, indent=4))
-
 # Creating spotify object
 sp = spotipy.Spotify(client_credentials_manager = client_credentials_manager, auth=token)
 
 user = sp.current_user()
-#print(json.dumps(user, sort_keys=True, indent=4))
 
 # Grabbing data from the current_user
 display_name = user['display_name']
@@ -46,40 +47,74 @@ tame_uri = 'spotify:artist:5INjqkS1o8h1imAzPqGZBb'
 diplo_uri = 'spotify:artist:5fMUXHkw8R8eOP2RNVYEZX'
 calvin_harris_uri = 'spotify:artist:7CajNmpbOovFoOoasH2HaY'
 
+# HELPER FUNCTIONS
 
-# ******************* RUNNING STATISTICS ON 'SUNNYD' and "RAINY DAY" PLAYLISTS *******************
+def get_top_artists():
+    res = sp.current_user_top_artists(time_range='long_term', limit = 5)
+    rtn = []
+    for el in res['items']:
+        rtn.append(el['name'])
+    return rtn
 
-# Save the URI of the playlist I want to analyze
-sunny_d_uri = 'spotify:playlist:6h5GNBGSdzPy0SE6NOMddo'
-rainy_day_uri = 'spotify:playlist:5BqayxS0OumOudUrK6Txek'
+def get_artist(name):
+    res = sp.search(q='artist:' + name, type='artist')
+    items = res['artists']['items']
+    if len(items) > 0:
+        return items[0]
+    else:
+        return None
 
-# Store the track URI's into an array that is needed for the audio_features method
-sunny_d_results = sp.playlist_items(sunny_d_uri, offset = 0, fields='items.track.id,total', additional_types=['track'])
-sunny_d_tracks = []
+def get_recommendations_for_artist(artist):
+    res = sp.recommendations(seed_artists=[artist['id']], limit=20)
+    rtn = []
+    for t in res['tracks']:
+        rtn.append([t['name'], t['artists'][0]['name'], t['uri']])
+    return rtn
 
-rainy_day_results = sp.playlist_items(rainy_day_uri, offset = 0, fields='items.track.id.total', additional_types=['track'])
-rainy_day_tracks = []
+def get_recommendations_for_top_artists(artists):
+    rtn = []
+    for a in artists:
+        tmp = get_artist(a)
+        rtn += get_recommendations_for_artist(tmp)
+    return rtn
+    
+def get_audio_features_for_recommended_tracks(recommendations):
+    tracks = []
+    for i in range(len(recommendations)):
+        tracks.append(recommendations[i][2])
+    features = sp.audio_features( tracks = tracks )
+    return features
 
-# Adding track id's from playlist into a local array
-for el in sunny_d_results['items']:
-    sunny_d_tracks.append('spotify:track:' + el['track']['id'])
-for el in rainy_day_results['items']:
-    rainy_day_tracks.append('spotify:track:' + el['track']['id'])
+def get_reccomendations_for_bad_weather(recommendations):
+    features = get_audio_features_for_recommended_tracks(recommendations)
+    rtn = []
+    for i in range(len(features)):
+        if features[i]['energy'] < 0.5 and features[i]['valence'] < 0.5:
+            rtn.append([recommendations[i][0], recommendations[i][1]])
+    return rtn
 
-# Features
-sunny_d_features = sp.audio_features(tracks=sunny_d_tracks)
-rainy_day_features = sp.audio_features(tracks=rainy_day_tracks)
+def get_reccomendations_for_good_weather(recommendations):
+    features = get_audio_features_for_recommended_tracks(recommendations)
+    rtn = []
+    for i in range(len(features)):
+        if features[i]['energy'] > 0.6 and features[i]['valence'] > 0.6:
+            rtn.append([recommendations[i][0], recommendations[i][1]])
+    return rtn
 
-print()
+def display_playlist_features(uri):
+    print()
 
-# Features that I want to track:
-# Energy
-# Tempo
-# Danceability
-# Valence
-# Tempo
+    # Get list of tracks for playlist
+    playlist_results = sp.playlist_items(uri, offset = 0, fields='items.track.id,total', additional_types=['track'])
+    tracks = []
 
-def display_playlist_features(features):
+    # Save the IDS for tracks
+    for el in playlist_results['items']:
+        tracks.append('spotify:track:' + el['track']['id'])
+
+    # Get audio features
+    features = sp.audio_features( tracks = tracks )
+
     low_energy_songs = []
     sum_energy = 0
     low_tempo_songs = []
@@ -94,7 +129,7 @@ def display_playlist_features(features):
         if features[i]['energy'] < 0.75:
             temp_track = sp.track(features[i]['uri'])
             low_energy_songs.append([temp_track['name'], features[i]['energy']])
-        if features[i]['tempo'] < 105:
+        if features[i]['tempo'] < 95:
             temp_track = sp.track(features[i]['uri'])
             low_tempo_songs.append([temp_track['name'], features[i]['tempo']])
         if features[i]['danceability'] < 0.65:
@@ -103,7 +138,7 @@ def display_playlist_features(features):
         if features[i]['mode'] == 0:
             temp_track = sp.track(features[i]['uri'])
             minor_key_songs.append([temp_track['name'], 'minor'])
-        if features[i]['valence'] < 0.75:
+        if features[i]['valence'] < 0.50:
             temp_track = sp.track(features[i]['uri'])
             low_valence_songs.append([temp_track['name'], features[i]['valence']])
         
@@ -122,117 +157,86 @@ def display_playlist_features(features):
     print()
     print('-------------------------------------')
     print('Tracks with low (< 0.75) energy: \n')
-    pprint(low_energy_songs)
+    print_songs(low_energy_songs)
     print()
     print(len(low_energy_songs), '/', len(features),
-        ':', percent(len(low_energy_songs)/len(features)), '%')
+        ':', percent(len(low_energy_songs)/len(features)), '% of tracks fell below the threshold')
     print('-------------------------------------')
 
-    print('Tracks that are low (< 105) tempo: \n')
-    pprint(low_tempo_songs)
+    print('Tracks that are low (< 95) tempo: \n')
+    print_songs(low_tempo_songs)
     print()
     print(len(low_tempo_songs), '/', len(features),
-        ':', percent(len(low_tempo_songs)/len(features)), '%')
+        ':', percent(len(low_tempo_songs)/len(features)), '% of tracks fell below the threshold')
     print('-------------------------------------')
 
     print('Tracks with low (< 65) danceability: \n')
-    pprint(low_danceability_songs)
+    print_songs(low_danceability_songs)
     print()
     print(len(low_danceability_songs), '/', len(features),
-        ':', percent(len(low_danceability_songs)/len(features)), '%')
+        ':', percent(len(low_danceability_songs)/len(features)), '% of tracks fell below the threshold')
     print('-------------------------------------')
 
-    print('Tracks with low (< 0.75) valence: \n')
-    pprint(low_valence_songs)
+    print('Tracks with low (< 0.50) valence: \n')
+    print_songs(low_valence_songs)
     print()
-    print(len(low_valence_songs), '/', len(features), ':', percent(len(low_valence_songs)/len(features)), '%')
+    print(len(low_valence_songs), '/', len(features), 
+        ':', percent(len(low_valence_songs)/len(features)), '% of tracks fell below the threshold')
     print('-------------------------------------')
 
     print('Tracks in minor key: \n')
-    pprint(minor_key_songs)
+    print_songs(minor_key_songs)
     print()
     print(len(minor_key_songs), "/", len(features),
-        ":", percent(len(minor_key_songs)/len(features)), '%')
+        ":", percent(len(minor_key_songs)/len(features)), '% of tracks were in the key of minor')
     print('-------------------------------------')
     print()
 
-print('Generating audio features for playlist: SunnyD...')
-display_playlist_features(sunny_d_features)
-print('Generating audio features for playlist: Rainy Day...')
-display_playlist_features(rainy_day_features)
+comedown_uri = 'spotify:playlist:4fIifdSKMpwcXTRO8B40j3'
+comeup_uri = 'spotify:playlist:3qTUrOWQdXwc7jh1bn9Sib'
 
-# ******************* DISPLAY CURRENT USER PLAYLISTS *******************
-current_playlists = sp.current_user_playlists(limit=50, offset=0)
-playlists_data = current_playlists['items']
-my_playlists = []
-while current_playlists['next']:
-    current_playlists = sp.next(current_playlists)
-    playlists_data.extend(current_playlists['items'])
+print('\nWelcome to Spotipy! Please choose a selection: \n')
+print('   1. Playlist analysis for \'Comeup\'')
+print('   2. Playlist analysis for \'Comedown\'')
+print('   3. Side-by-side comparison')
+print('   4. Generate songs for current weather')
 
-for play in playlists_data:
-    my_playlists.append(play['name'])
+choice = input('\nSelection: ')
 
-# print("My Playlists: ", my_playlists)
-# print()
+if int(choice) == 1:
+    print('\nDisplaying playlist features for Comeup...')
+    display_playlist_features(comeup_uri)
+elif int(choice) == 2:
+    print('\nDisplaying playlist features for Comedown...')
+    display_playlist_features(comedown_uri)
+elif int(choice) == 3:
+    print('\nCreating comparison for two both playlists...')
+    time.sleep(2.5)
+    print('\n*---------- DATA FEATURES: Comedown ----------*')
+    print('\nEnergy: 73% of tracks fell below 0.75')
+    print('\nTempo: 21% of tracks fell below 95 BPM')
+    print('\nDanceability: 50% of tracks fell below 0.65')
+    print('\nValence: 67% of tracks fell below 0.50')
+    print('\n*---------- DATA FEATURES: Comeup ----------*')
+    print('\nEnergy: 40% of tracks fell below 0.75')
+    print('\nTempo: 10% of tracks fell below 95 BPM')
+    print('\nDanceability: 27% of tracks fell below 0.65')
+    print('\nValence: 37% of tracks fell below 0.50')
+elif int(choice) == 4:
+    location = input('Please enter your current location: ')
 
-# ******************* ADD ITEM TO PLAYLIST *******************
-input_playlist = 'spotify:playlist:1Yp1rShzcf3wOrHhGJloNw'
-songs_to_add = ['spotify:track:2IFFKj9orAsQOOS0JRhHAW']
-# sp.playlist_add_items(input_playlist, songs_to_add)
+    key = 'e578acfe3a0075fde4a5ccf2d1771864'
+    weather_map_url = 'http://api.openweathermap.org/data/2.5/weather?q={}&appid={}'.format(location, key)
+    weather_map_res = requests.get(weather_map_url)
+    data = weather_map_res.json()
 
-# ******************* DISPLAY A PLAYLISTS'S TRACKS *******************
-lo_fi_playlist_uri = 'spotify:playlist:7Ea4ut5vVyWwK6ssFfFmP8'
-#fetched = sp.playlist_items(lo_fi_playlist_uri, offset=offset, fields='items.track.name')
+    temp = data['main']['temp']
+    temp = (temp - 273.15) * (9 / 5) + 32
+    desc = data['weather'][0]['main']
 
-# pprint(fetched['items'])
-# print()
-
-# ******************* DISPLAY MY TOP ARTISTS *******************
-fetched_top_artists = sp.current_user_top_artists(limit=20,offset=0,time_range='medium_term')
-#for i, item in enumerate(fetched_top_artists['items']):
-    #print(i + 1, item['name'])
-#print()
-
-# ******************* DISPLAY MY TOP ARTISTS *******************
-fetched_top_tracks = sp.current_user_top_tracks(limit=20,offset=0,time_range='medium_term')
-#for i, item in enumerate(fetched_top_tracks['items']):
-    #print(i + 1, item['name'])
-#print()
-
-# ******************* CREATE A PLAYLIST FOR USER *******************
-playlist_name = "Spotify API"
-# sp.user_playlist_create(my_id, playlist_name)
-
-# ******************* DISPLAY ARTIST ALBUMS *******************
-results = sp.artist_albums(calvin_harris_uri, album_type='album')
-albums_data = results['items']
-albums = []
-while results['next']:
-    results = sp.next(results)
-    albums_data.extend(results['items'])
-
-for album in albums_data:
-    if not album['name'] in albums:
-        albums.append(album['name'])
-
-# print("Calvin Harris's Albums: ", albums)
-
-# ******************* DISPLAY AUDIO FEATURES *******************
-results = sp.audio_features(tracks=['spotify:track:7ef4DlsgrMEH11cDZd32M6'])
-# print(results[0]['danceability'])
-
-# ******************* CREATE PLAYLIST AND ADD SONGS TO PLAYLIST *******************
-
-# Create playlist
-playlist_name = "SunnyD"
-playlist_description = "Go outside silly!"
-# sp.user_playlist_create(my_id, playlist_name, description=playlist_description)
-
-# Get the ID of the most recently created playlist
-playlists = sp.current_user_playlists()
-playlist_id = 'spotify:playlist:' + playlists['items'][0]['id']
-
-# Upload a cover image
-playlist_image = ''
-#sp.playlist_upload_cover_image(playlist_id, playlist_image)
-
+    if desc == 'Clouds':
+        print('\nLooks like it\'s a little gloomy in ' + location + ' right now :( Here are some songs for staying in bed all day:\n')
+        print_recommendations(get_reccomendations_for_bad_weather(get_recommendations_for_top_artists(get_top_artists())))
+    elif desc == 'Clear':
+        print('\nLooks like it\'s nice and sunny in ' + location + ' right now! Here are some songs for you:\n')
+        print_recommendations(get_reccomendations_for_good_weather(get_recommendations_for_top_artists(get_top_artists())))
