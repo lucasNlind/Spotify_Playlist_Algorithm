@@ -19,9 +19,9 @@ def print_recommendations(songs):
 def percent(n):
     return int(n * 100)
 
-cid = 'ab16321ec31348b881a8965914f2f23a'
-secret = '926b25bd2ec74144b2b7627120fbd1d0'
-username = 'pimplepopper23'
+cid = 'CID'
+secret = 'SECRET'
+username = 'username'
 scope = 'playlist-modify-public user-top-read'
 
 client_credentials_manager = SpotifyClientCredentials(client_id=cid, client_secret=secret)
